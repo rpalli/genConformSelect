@@ -1,30 +1,32 @@
 
-# import stuff I need
+# import necessary python packages
 import random as rand
 import math as math
 import numpy as np
 kb=.0019872041 # define kb so it can be used easily later
 
-#define v1 and v2 as functions
-def V1(x):
-	return .5*(x**4-3*x**2+.5*x)
-def V2(x):
-	return V1(x)+.2*math.cos(20*x)
+
+# Energy function extracted from Grieves and Zhou
+def U(r, R1, L, U0):
+	return -U0*(tanh((r-R1)/L)/2)
+
 class potential:
 	# class for calculation of the Boltzmann factors... using a given potential. 
 	# if statements below map functions to the potential so potential.potentialName gives the name
 	# and potential.energy(x) returns the actual value of the potential at x
 	# and potential.BF(x, T) returns the boltzmann factor for x at T given the potential initialized
-	def __init__(self,potentialName):
+	def __init__(self,potentialName, R, U0, Lfactor):
 		self.potentialName=potentialName
-		# identify the energy function with the correct v1 or v2 function from above
-		if potentialName=='v1':
-			self.energy=V1
-		if potentialName=='v2':
-			self.energy=V2
+		self.U0=U0
+		self.L=L_factor*R  # set sharpness of switch
+		self.R=R
+		self.R1=1.1*R1 # set the outer radius of the protein shell as in Grieves and Zhou
+	# initialized energy function
+	def U(r):
+		return U(r, self.R1, self.L, self.U0)
 	# function of initialized potential that returns Boltzman factor
 	def BF(self,x,T):
-		return self.energy(x)/(kb*T)
+		return self.U(x)/(kb*T)
 
 # function to run MC sim and return P(A) 
 def MCSim(steps, potentialName, temp):
