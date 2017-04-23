@@ -8,12 +8,13 @@ import pandas as pd
 import seaborn as sns
 from scipy import stats, integrate
 import matplotlib.pyplot as plt
+import itertools as it
 
 
 
 # Energy function extracted from Grieves and Zhou
 def U(r, R1, L, U0):
-	return -U0*(tanh((r-R1)/L)/2)
+	return -U0*(math.tanh((r-R1)/L)/2)
 
 class ligPotential:
 	# class for calculation of the Boltzmann factors for each individual ligand... initialize with U0, L, and R... 
@@ -39,7 +40,7 @@ class recPotential:
 		self.R=R
 		self.R1=1.1*R # set the outer radius of the protein shell as in Grieves and Zhou
 	# Boltzmann factor calculation
-	def BF(states):
+	def BF(self,states):
 		return numpy.sum([U(numpy.linalg.norm(states[i]), self.R1, self.L, self.U0) for i in range(1,len(states)) ])
 
 def rateCalc(state):
@@ -88,7 +89,7 @@ def MCSim(steps, numLigands, ligPotential, pActivateStep, R2, dims, delta):
 				state[0]=False
 			else:
 				y=rand.random()
-				if y<math.exp(recPotential.BF(state)):
+				if y<math.exp(rec.BF(state)):
 					state[0]=True
 		else: # if not a receptor step, move a ligand
 			state=updateLigState(state, ligPotential, R2, delta)
@@ -102,6 +103,7 @@ def MCSim(steps, numLigands, ligPotential, pActivateStep, R2, dims, delta):
 
 def testLigMoves():
 	steps=1000000
+	trials=10
 	numLigands=1
 	R=1.
 	U0=100.
@@ -113,23 +115,25 @@ def testLigMoves():
 	pActivateStep=1/(stepsBeforeCheck*numLigands)
 	ligPot=ligPotential( R, U0, Lfactor)
 
-	for delta in [.25,.5,1]:
-		outStates=MCSim(steps, numLigands, ligPot, pActivateStep, R2, dims, delta)
-		rawX=[x[1] for x in outStates if x[0]==False]
-		filteredX=[rawX[i] for i in range(0,len(rawX),10)]
-		labels = ['x', 'y']
-		df = pd.DataFrame.from_records(filteredX, columns=labels)
-
-		sns.jointplot( x='x',y='y',data=df, kind="kde")
-		plt.savefig('off'+str(delta*100)+'.png', bbox_inches='tight')
-
-		rawX=[x[1] if x[0]==True for x in outStates]
-		filteredX=[rawX[i] for i in range(0,len(rawX),10)]
-		labels = ['x', 'y']
-		df = pd.DataFrame.from_records(filteredX, columns=labels)
-
-		sns.jointplot( x='x',y='y',data=df, kind="kde")
-		plt.savefig('on'+str(delta*100)+'.png', bbox_inches='tight')
+	
+	outStates=[]
+	for k in range(trials):
+		outStates.extend(MCSim(steps, numLigands, ligPot, pActivateStep, R2, dims, delta))
+	#rawX=[x[1] if x[0]==False else 100 for x in outStates ]
+	rawX=filter(lambda a: a[0]==False, outStates)
+	rawX=[x[1] for x in rawX]
+	filteredX=[rawX[i] for i in range(0,len(rawX),10)]
+	labels = ['x', 'y']
+	df = pd.DataFrame.from_records(filteredX, columns=labels)
+	sns.jointplot( x='x',y='y',data=df, kind="kde")
+	plt.savefig('off'+str(delta*100)+'.png', bbox_inches='tight')
+	rawX=filter(lambda a: a[0]==True, outStates)
+	rawX=[x[1] for x in rawX]
+	filteredX=[rawX[i] for i in range(0,len(rawX),10)]
+	labels = ['x', 'y']
+	df = pd.DataFrame.from_records(filteredX, columns=labels)
+	sns.jointplot( x='x',y='y',data=df, kind="kde")
+	plt.savefig('on'+str(delta*100)+'.png', bbox_inches='tight')
 
 #function to estimate avgs and errors by repeat calls to MCSim
 def estimateMCerror(steps, potentialName, temp, trials):
