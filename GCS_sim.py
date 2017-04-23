@@ -74,10 +74,11 @@ def updateLigState(state, potential, R2, delta):
 
 # function to run MC sim and return trajectory
 # our formalism lets R=1
-def MCSim(steps, numLigands, ligPotential, pActivateStep, R2, dims, delta):
+def MCSim(steps, numLigands, ligPotential, pActivateStep, R2, dims, delta, omegaNeg):
 	rec=recPotential(ligPotential.R, ligPotential.U0, ligPotential.L)
 	react=False 
 	trajectory=[]
+	truthList=[]
 	state=getInitialStates(numLigands, dims, R2, ligPotential.R) # set up initial ligand positions
 	# initRate=rateCalc(state) # set up initial rate of reaction completion given starting states
 	trajectory.append(list(state)) # add initial state to the trajectory
@@ -85,15 +86,30 @@ def MCSim(steps, numLigands, ligPotential, pActivateStep, R2, dims, delta):
 	for step in range(steps): # iterate over MC steps
 		x=rand.random() #generate random number to pick what type of step to do
 		if x<pActivateStep: # check if step to be performed is protein activation, if so, see if receptor should be set to active state
+			y=rand.random()
 			if state[0]:
-				state[0]=False
+				if y<omegaNeg:
+					state[0]=False
 			else:
-				y=rand.random()
-				if y<math.exp(rec.BF(state)):
+				if y< omegaNeg*math.exp(rec.BF(state)):
 					state[0]=True
 		else: # if not a receptor step, move a ligand
 			state=updateLigState(state, ligPotential, R2, delta)
 		# finalRate=rateCalc(state) # calculate rate of reaction completion at the current state
+		truth=[]
+		if state[0]:
+			truth.append(True)
+		else:
+			truth.append(False)
+		bound=False
+		for ligand in state[1:]:
+			if numpy.linalg.norm(ligand)<ligPotential.R1:
+				bound=True
+		truth.append(bound)
+		if(truth[0] and bound):
+			truth.append(True)
+		else:
+			truth.append(False)
 		trajectory.append(list(state))
 		x=rand.random()
 		# if x < (1-math.exp(-.5*(initRate+finalRate))): # check to see if reaction happens based on initial and final rates of reaction completion
@@ -101,8 +117,39 @@ def MCSim(steps, numLigands, ligPotential, pActivateStep, R2, dims, delta):
 		# 	break
 	return trajectory
 
-def testLigMoves():
+
+def runSim(numLigands, Lfactor,dims, omegaNeg):
 	steps=1000000
+	trials=5
+	R=1.
+	U0=100.
+	stepsBeforeCheck=100
+	R2=11.
+	delta=.25
+	pActivateStep=1/(stepsBeforeCheck*numLigands)
+	ligPot=ligPotential( R, U0, Lfactor)
+	omegaNeg=.1
+	outStates=[]
+	for k in range(trials):
+		outStates.extend(MCSim(steps, numLigands, ligPot, pActivateStep, R2, dims, delta, omegaNeg))
+	#rawX=[x[1] if x[0]==False else 100 for x in outStates ]
+	rawX=filter(lambda a: a[0]==False, outStates)
+	rawX=[[x[i][j] for i in range(1,len(x)) for j in range(len(x[i]))]for x in rawX]
+	filteredX=[rawX[i] for i in range(0,len(rawX),10)]
+	labels = ['x1', 'y1', 'x2', 'y2']
+	df = pd.DataFrame.from_records(filteredX, columns=labels)
+	sns.jointplot( x='x1',y='y1',data=df, kind="kde")
+	plt.savefig('off2lig'+str(delta*100)+'.png', bbox_inches='tight')
+	rawX=filter(lambda a: a[0]==True, outStates)
+	rawX=[[x[i][j] for i in range(1,len(x)) for j in range(len(x[i]))]for x in rawX]
+	filteredX=[rawX[i] for i in range(0,len(rawX),10)]
+	labels = ['x1', 'y1', 'x2', 'y2']
+	df = pd.DataFrame.from_records(filteredX, columns=labels)
+	sns.jointplot( x='x1',y='y1',data=df, kind="kde")
+	plt.savefig('on2lig'+str(delta*100)+'.png', bbox_inches='tight')
+
+def testLigMoves():
+	steps=10000
 	trials=10
 	numLigands=1
 	R=1.
@@ -114,11 +161,11 @@ def testLigMoves():
 	delta=.25
 	pActivateStep=1/(stepsBeforeCheck*numLigands)
 	ligPot=ligPotential( R, U0, Lfactor)
-
+	omegaNeg=.1
 	
 	outStates=[]
 	for k in range(trials):
-		outStates.extend(MCSim(steps, numLigands, ligPot, pActivateStep, R2, dims, delta))
+		outStates.extend(MCSim(steps, numLigands, ligPot, pActivateStep, R2, dims, delta, omegaNeg))
 	#rawX=[x[1] if x[0]==False else 100 for x in outStates ]
 	rawX=filter(lambda a: a[0]==False, outStates)
 	rawX=[x[1] for x in rawX]
@@ -144,4 +191,4 @@ def estimateMCerror(steps, potentialName, temp, trials):
 	variance=sum([(mean-sample)**2 for sample in PA])/len(PA) #find variance
 	return mean, variance
 
-testLigMoves()
+runSim(2, .05,2, .5)
