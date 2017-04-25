@@ -9,6 +9,7 @@ import seaborn as sns
 from scipy import stats, integrate
 import matplotlib.pyplot as plt
 import itertools as it
+import pickle as pickle
 
 # Energy function extracted from Grieves and Zhou
 def U(r, R1, L, U0):
@@ -96,7 +97,7 @@ def MCSim(steps, numLigands, ligPotential, pActivateStep, R2, dims, delta, omega
 				if y< omegaNeg*math.exp(rec.BF(state)):
 					state[0]=True
 					proteinActivateState=list(state)
-					print('protein active')
+					# print('protein active')
 					for k in range(1,len(state)):
 						if numpy.linalg.norm(state[k])< ligPotential.R1:
 							IF=True
@@ -129,14 +130,14 @@ def MCSim(steps, numLigands, ligPotential, pActivateStep, R2, dims, delta, omega
 			if x < (1-math.exp(-1.*gamma)): # check to see if reaction happens based on initial and final rates of reaction completion
 				react=True
 				ligandReactState=list(state)
-				print('reacted')
+				# print('reacted')
 				break
 	return [react,IF, CS, proteinActivateState, ligandReactState]
 	#return trajectory
 
 def runSim(numLigands, Lfactor,dims, omegaNeg):
-	steps=100000
-	trials=100
+	steps=1000000
+	trials=1000
 	R=1.
 	U0=math.log(100.)
 	stepsBeforeCheck=100
@@ -216,4 +217,13 @@ def estimateMCerror(steps, potentialName, temp, trials):
 	variance=sum([(mean-sample)**2 for sample in PA])/len(PA) #find variance
 	return mean, variance
 # testLigMoves()
-runSim(2, .005,2, .5)
+def LfactorTest():
+	for ligands in [2, 1, 5, 10]:
+		print("ligand")
+		print(ligands)
+		for Lfactor in [.005, .0025, .01, .001, .025]:
+			print("Lfactor")
+			print(Lfactor)
+			output=runSim(ligands, Lfactor,2, .5)
+			pickle.dump(output , open( "Lfactor_"+str(Lfactor)+"_ligand_"+str(ligands)+"_output", "wb" ) )
+LfactorTest()
