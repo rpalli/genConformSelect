@@ -41,8 +41,6 @@ class recPotential:
 	def BF(self,states):
 		return numpy.sum([U(numpy.linalg.norm(states[i]), self.R1, self.L, self.U0) for i in range(1,len(states)) ])
 
-def rateCalc(state):
-	return 0
 def getInitialStates(numLigands, dims, R2, R):
 	states=2.*R2*numpy.random.random_sample((numLigands, dims))-1.*R2
 	for i in range(len(states)):
@@ -59,10 +57,11 @@ def updateLigState(state, potential, R2, delta):
 		deltas=delta*(.5-numpy.random.random_sample(tuple([len(state[x])])))
 		newState=numpy.add(state[x],deltas)
 		# print(newState)
+		r1=numpy.linalg.norm(state[x])
 		r=numpy.linalg.norm(newState)
 		if potential.R<r<R2:
 			possible=True
-	energy=potential.BF(float(r),bool(state[0]))
+	energy=potential.BF(float(r),bool(state[0]))-potential.BF(float(r1),bool(state[0]))
 	# print(energy)
 	# print(math.exp(energy))
 	if rand.random()< math.exp(energy):
@@ -71,13 +70,12 @@ def updateLigState(state, potential, R2, delta):
 
 # function to run MC sim and return trajectory
 # our formalism lets R=1
-def MCSim(steps, numLigands, ligPotential, pActivateStep, R2, dims, delta, omegaNeg):
+def MCSim(steps, numLigands, ligPotential, pActivateStep, R2, dims, delta, omegaNeg, gamma):
 	rec=recPotential(ligPotential.R, ligPotential.U0, ligPotential.L)
 	react=False 
-	# trajectory=[]
+	trajectory=[]
 	truthList=[]
 	state=getInitialStates(numLigands, dims, R2, ligPotential.R) # set up initial ligand positions
-	initRate=rateCalc(state) # set up initial rate of reaction completion given starting states
 	# trajectory.append(list(state)) # add initial state to the trajectory
 	IF=False
 	CS=False
@@ -106,9 +104,8 @@ def MCSim(steps, numLigands, ligPotential, pActivateStep, R2, dims, delta, omega
 						CS=True
 		else: # if not a receptor step, move a ligand
 			state=updateLigState(state, ligPotential, R2, delta)
-		finalRate=rateCalc(state) # calculate rate of reaction completion at the current state
 		truth=[]
-		if state[0]:
+		if state[0]==True:
 			truth.append(True)
 		else:
 			truth.append(False)
@@ -123,32 +120,38 @@ def MCSim(steps, numLigands, ligPotential, pActivateStep, R2, dims, delta, omega
 			truth.append(False)
 		# trajectory.append(list(state))
 		checkReact=False
-		if state[0]:
+		if state[0]==True:
 			for k in range(1,len(state)):
 				if numpy.linalg.norm(state[k])< ligPotential.R1:
 					checkReact=True
 		if checkReact:
 			x=rand.random()
-			if x < (1-math.exp(-.5*(initRate+finalRate))): # check to see if reaction happens based on initial and final rates of reaction completion
+			if x < (1-math.exp(-1.*gamma)): # check to see if reaction happens based on initial and final rates of reaction completion
 				react=True
 				ligandReactState=list(state)
+				print('reacted')
 				break
-		initRate=finalRate
 	return [react,IF, CS, proteinActivateState, ligandReactState]
-	# return trajectory
-
-def rateCalc(state):
-	return 0
+	#return trajectory
 
 def runSim(numLigands, Lfactor,dims, omegaNeg):
-	steps=1000000
-	trials=5
+	steps=100000
+	trials=100
 	R=1.
-	U0=100.
+	U0=math.log(100.)
 	stepsBeforeCheck=100
 	R2=11.
 	delta=.25
 	pActivateStep=1/(stepsBeforeCheck*numLigands)
+	gamma=10
+	numLigands=2
+	omegaNeg=.5
+	Lfactor=.005
+	dims=2
+	
+	pActivateStep=1/(stepsBeforeCheck*numLigands)
+	ligPot=ligPotential( R, U0, Lfactor)
+
 	ligPot=ligPotential( R, U0, Lfactor)
 	outStates=[]
 	IFs=[]
@@ -156,8 +159,9 @@ def runSim(numLigands, Lfactor,dims, omegaNeg):
 	reacts=[]
 	proteinActivateStates=[]
 	ligandReactStates=[]
-	for i in range(trials):
-		[react,IF, CS, proteinActivateState, ligandReactState]=MCSim(steps, numLigands, ligPot, pActivateStep, R2, dims, delta, omegaNeg)
+	#MCSim(steps, numLigands, ligPot, pActivateStep, R2, dims, delta, omegaNeg)
+	for k in range(trials):
+		[react,IF, CS, proteinActivateState, ligandReactState]=MCSim(steps, numLigands, ligPot, pActivateStep, R2, dims, delta, omegaNeg, gamma)
 		print([react,IF, CS, proteinActivateState, ligandReactState])
 		reacts.append(react)
 		IFs.append(IF)
@@ -212,4 +216,4 @@ def estimateMCerror(steps, potentialName, temp, trials):
 	variance=sum([(mean-sample)**2 for sample in PA])/len(PA) #find variance
 	return mean, variance
 # testLigMoves()
-runSim(10, .005,2, .5)
+runSim(2, .005,2, .5)
