@@ -17,7 +17,7 @@ def rbyL(dataDict,Lfactors,ligandNum):
 	for Lfactor in Lfactors: 
 		# get data
 		tempResult=[]
-		proteinStates=dataDict[ligandNum+Lfactor][4]
+		proteinStates=dataDict[ligandNum+Lfactor][3]
 		proteinStates=filter(lambda a: len(a)>0, proteinStates)
 		# iterate over trials, find min ligand distance when protein was activated
 		for run in proteinStates:
@@ -29,14 +29,16 @@ def rbyL(dataDict,Lfactors,ligandNum):
 			tempResult.append(float(min(Rs)))
 		results.append(tempResult)
 	sns.set_style("ticks")
-
 	sns.set(font_scale=2) 
-	ax=plt.boxplot(results)
+	fig, ax = plt.subplots()
+	plt.boxplot(results)
+	ax.set_ylim(1,3)
 	sns.set_palette(sns.light_palette("purple/blue", input="xkcd", reverse=True))
 	sns.set_style("white")
 	#sns.set_style("whitegrid")
 	#plt.tight_layout()
-	plt.xticks(range(len(Lfactors)),Lfactors)
+	plt.xticks(range(1, len(Lfactors)+1),Lfactors)
+
 	plt.ylabel('Closest ligand distance')
 	plt.xlabel('Lfactor')
 	plt.title('R at protein activation- '+str(ligandNum)+' ligands')
@@ -76,6 +78,36 @@ def IFfracPlot(dataDict,Lfactors,ligands):
 	recter=[]
 	for i in range(len(results)):
 		recter.append(ax.bar(y_pos+i*width, results[i], width, color=colors[i]))
+	rects=[rect[0] for rect in recter]
+	ax.legend(tuple(rects), tuple(ligands),bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+	#plt.bar(y_pos, results[0], align='center', alpha=0.5, capsize=20)
+	plt.xticks(y_pos+2*width, Lfactors)
+	plt.ylabel('Proportion IF')
+	plt.xlabel('L_factor')
+	plt.title('Fraction IF by L_factor and Ligand Number')
+	plt.tight_layout()
+	sns.despine()
+	plt.tight_layout()
+	plt.savefig('IFfracPlot.png', bbox_inches='tight')
+	#plt.show()
+
+
+if __name__ == '__main__':
+
+	Lfactors=[.001, .0025, .005, .01, .025 ] # Lfactors that were tested
+	ligands=[ 1] # ligands that were tested
+
+	dataDict={}
+	# read in data from runs into a dictionary that specifies starting state
+	for ligand in ligands:
+		for Lfactor in Lfactors:
+			data=pickle.Unpickler(open( "Lfactor_"+str(Lfactor)+"_ligand_"+str(ligand)+"_output", "rb" )).load()
+			dataDict[ligand+Lfactor]=data
+	# the dict is saving a list with the following variables: [reacts- did the reaction proceed?, IFs- via IF?, CSs- Visa CS?, proteinActivateStates- where were ligands when receptor activated, ligandReactStates- where were ligands when the reaction happened?]
+	#IFfracPlot(dataDict,Lfactors,ligands)
+	# generage r vs Lfactor plots
+	for ligand in ligands:
+		rbyL(dataDict,Lfactors,ligand).bar(y_pos+i*width, results[i], width, color=colors[i]))
 	rects=[rect[0] for rect in recter]
 	ax.legend(tuple(rects), tuple(ligands),bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
 	#plt.bar(y_pos, results[0], align='center', alpha=0.5, capsize=20)
