@@ -1,4 +1,5 @@
 
+
 # import necessary python packages
 import random as rand
 import math as math
@@ -145,6 +146,10 @@ def runSim(numLigands, Lfactor,dims, omegaNeg):
 	delta=.25
 	pActivateStep=1/(stepsBeforeCheck*numLigands)
 	gamma=10
+	numLigands=2
+	omegaNeg=.5
+	Lfactor=.005
+	dims=2
 	
 	pActivateStep=1/(stepsBeforeCheck*numLigands)
 	ligPot=ligPotential( R, U0, Lfactor)
@@ -214,10 +219,10 @@ def estimateMCerror(steps, potentialName, temp, trials):
 	return mean, variance
 # testLigMoves()
 def LfactorTest():
-	for ligands in [2]:
+	for ligands in [ 2]:
 		print("ligand")
 		print(ligands)
-		for Lfactor in [.001, .0025, .005, .01, .025 ]:
+		for Lfactor in [.001, .025]:
 			print("Lfactor")
 			print(Lfactor)
 			output=runSim(ligands, Lfactor,2, .5)
