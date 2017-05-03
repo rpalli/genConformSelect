@@ -1,59 +1,61 @@
-
 # import necessary python packages
-import random as rand
-import math as math
-import numpy as numpy
-import numpy as np
-import pandas as pd
-import seaborn as sns
-from scipy import stats, integrate
-import matplotlib.pyplot as plt
-import itertools as it
-import pickle as pickle
+import random as rand # random number generator
+import math as math # math utility
+import numpy as numpy # fast numeric calculations
+import pandas as pd # data management wrapper
+import seaborn as sns # plotting software that uses above pandas data wrappers
+from scipy import stats # statistical utility
+import matplotlib.pyplot as plt # finer tuning of plots
+import itertools as it # utility for simpler loops
+import pickle as pickle # package to save data in easy to re-read python format
 
-# Energy function extracted from Grieves and Zhou
+# Energy function extracted from Grieves and Zhou for when protein is active
 def U(r, R1, L, U0):
 	return -U0*(math.tanh((r-R1)/L)/2)
 
+# class for calculation of the Boltzmann factors for each individual ligand... initialize with U0, L, and R... 
 class ligPotential:
-	# class for calculation of the Boltzmann factors for each individual ligand... initialize with U0, L, and R... 
 	def __init__(self, R, U0, Lfactor):
 		self.U0=U0
 		self.L=Lfactor*R  # set sharpness of switch
 		self.R=R
 		self.R1=1.1*R # set the outer radius of the protein shell as in Grieves and Zhou
-	# Boltzmann factor calculation
+	# Boltzmann factor calculation if protein is active
 	def BFcalc(self, r):
 		return U(r, self.R1, self.L, self.U0)
+	# return Bolzmann factor that is correct
 	def BF(self, r,active):
 		if active:
 			return self.BFcalc(r)
 		else:
 			return 0
 
+# class for calculation of the Boltzmann factors for the receptor... initialize with U0, L, and R... 
 class recPotential:
-	# class for calculation of the Boltzmann factors for the receptor... initialize with U0, L, and R... 
 	def __init__(self, R, U0, Lfactor):
 		self.U0=U0
 		self.L=Lfactor*R  # set sharpness of switch
 		self.R=R
 		self.R1=1.1*R # set the outer radius of the protein shell as in Grieves and Zhou
-	# Boltzmann factor calculation
+	# Boltzmann factor calculation for the receptor at a particular state
 	def BF(self,states):
 		return numpy.sum([U(numpy.linalg.norm(states[i]), self.R1, self.L, self.U0) for i in range(1,len(states)) ])
 
+# generate a set of randomly initialized initial states for numLigands ligands in dims dimensions with distace between R and R2. 
 def getInitialStates(numLigands, dims, R2, R):
+	# we do this by generating states between -R2 and R2 in each dimension then throwing them out if they are too far away. 
 	states=2.*R2*numpy.random.random_sample((numLigands, dims))-1.*R2
 	for i in range(len(states)):
 		while not R<numpy.linalg.norm(states[i])<R2:
 			states[i]=2.*R2*numpy.random.random_sample((dims))-1.*R2
-		# print(states[i])
-		# print(numpy.linalg.norm(states[i]))
-	return [False]+list(states)
+	return [False]+list(states) # return a "state" which includes locations of all the ligands and the state of the protein. We always start the protein off
 
+# this is function to perform a ligand move
 def updateLigState(state, potential, R2, delta):
+	# we pick a random ligand, generate a move, calculate the energy, and see if the move should be accepted
+	# pick a ligand, x, to attempt to move
 	x=1+math.floor(1.*(len(state)-1)*rand.random())
-	possible=False
+	possible=False # keep generating moves until one that is possible is generated
 	while(not possible):
 		deltas=delta*(.5-numpy.random.random_sample(tuple([len(state[x])])))
 		newState=numpy.add(state[x],deltas)
@@ -62,31 +64,46 @@ def updateLigState(state, potential, R2, delta):
 		r=numpy.linalg.norm(newState)
 		if potential.R<r<R2:
 			possible=True
+	# find energy of generated possible move
 	energy=potential.BF(float(r),bool(state[0]))-potential.BF(float(r1),bool(state[0]))
-	# print(energy)
-	# print(math.exp(energy))
+	# decide whether to accept move
 	if rand.random()< math.exp(energy):
 		state[x]=newState
 	return state
 
-# function to run MC sim and return trajectory
+# function to perform MC and return trajectory or important characteristics of the simulation together
 # our formalism lets R=1
 def MCSim(steps, numLigands, ligPotential, pActivateStep, R2, dims, delta, omegaNeg, gamma):
+	
+	# steps gives the number of MC steps
+	# numLigands gives the number of ligands
+	# ligPotential gives the ligand potential
+	# pActivateStep gives the probability of a move to attempt to activate or inactivate the ligand
+	# R2 gives the radius that ligands are allowed to diffuse in
+	# dims gives the number of dimensions
+	# delta gives the diffision constant i.e. how much a ligand is allowed to move on each step
+	# omegaNeg is the rate of reversion of receptor to the inactive state at each MC step
+	# gamma is the rate constant for the reaction after the ligand is in an active receptor
+
+	# set up receptor potential, initial states of outputlists, system
 	rec=recPotential(ligPotential.R, ligPotential.U0, ligPotential.L)
 	react=False 
-	trajectory=[]
+	trajectory=[] # stores successive list of states
 	truthList=[]
 	state=getInitialStates(numLigands, dims, R2, ligPotential.R) # set up initial ligand positions
-	# trajectory.append(list(state)) # add initial state to the trajectory
 	IF=False
 	CS=False
-	# print(state)
-	proteinActivateState=[]
-	ligandReactState=[]
+	proteinActivateState=[] # stores states at which the protein was activated before final reaction
+	ligandReactState=[] # stores locations of ligands when the protein became activated before final reaction
+	
+	trajectory.append(list(state)) # add initial state to the trajectory
+
+	# iterate over n MC steps
 	for step in range(steps): # iterate over MC steps
 		x=rand.random() #generate random number to pick what type of step to do
 		if x<pActivateStep: # check if step to be performed is protein activation, if so, see if receptor should be set to active state
 			y=rand.random()
+			# if the protein is active, then try to inactivate
 			if state[0]:
 				if y<omegaNeg:
 					state[0]=False
@@ -94,10 +111,11 @@ def MCSim(steps, numLigands, ligPotential, pActivateStep, R2, dims, delta, omega
 					CS=False
 					IF=False
 			else:
+				# if protein is inactive, try to activate. 
 				if y< omegaNeg*math.exp(rec.BF(state)):
 					state[0]=True
+					# update states of various flags to indicate whether IF or CS mechanism, ligand locations as of this activation
 					proteinActivateState=list(state)
-					# print('protein active')
 					for k in range(1,len(state)):
 						if numpy.linalg.norm(state[k])< ligPotential.R1:
 							IF=True
@@ -105,21 +123,8 @@ def MCSim(steps, numLigands, ligPotential, pActivateStep, R2, dims, delta, omega
 						CS=True
 		else: # if not a receptor step, move a ligand
 			state=updateLigState(state, ligPotential, R2, delta)
-		truth=[]
-		if state[0]==True:
-			truth.append(True)
-		else:
-			truth.append(False)
-		bound=False
-		for ligand in state[1:]:
-			if numpy.linalg.norm(ligand)<ligPotential.R1:
-				bound=True
-		truth.append(bound)
-		if(truth[0] and bound):
-			truth.append(True)
-		else:
-			truth.append(False)
-		# trajectory.append(list(state))
+
+		trajectory.append(list(state)) # add step to the trajectory
 		checkReact=False
 		if state[0]==True:
 			for k in range(1,len(state)):
@@ -132,10 +137,12 @@ def MCSim(steps, numLigands, ligPotential, pActivateStep, R2, dims, delta, omega
 				ligandReactState=list(state)
 				# print('reacted')
 				break
-	return [react,IF, CS, proteinActivateState, ligandReactState]
-	#return trajectory
+	return [react,IF, CS, proteinActivateState, ligandReactState] # return important var: did we react? was it IF? was it CS? where were ligands when the protein activated? where were ligands when the protein reacted? 
+	#return trajectory # switch out return statements if we want to see the trajectory
 
+# function to run an experiment by running many MC sims and collecting results
 def runSim(numLigands, Lfactor,dims, omegaNeg):
+	# set up default parameters
 	steps=1000000
 	trials=1000
 	R=1.
@@ -145,14 +152,8 @@ def runSim(numLigands, Lfactor,dims, omegaNeg):
 	delta=.25
 	pActivateStep=1/(stepsBeforeCheck*numLigands)
 	gamma=10
-	numLigands=2
-	omegaNeg=.5
-	Lfactor=.005
-	dims=2
-	
-	pActivateStep=1/(stepsBeforeCheck*numLigands)
-	ligPot=ligPotential( R, U0, Lfactor)
 
+	# set up ligand potential, output arrays
 	ligPot=ligPotential( R, U0, Lfactor)
 	outStates=[]
 	IFs=[]
@@ -160,7 +161,7 @@ def runSim(numLigands, Lfactor,dims, omegaNeg):
 	reacts=[]
 	proteinActivateStates=[]
 	ligandReactStates=[]
-	#MCSim(steps, numLigands, ligPot, pActivateStep, R2, dims, delta, omegaNeg)
+	# run MC sim over number of trials, print results, compile them, then print summary of all results and return result arrays
 	for k in range(trials):
 		[react,IF, CS, proteinActivateState, ligandReactState]=MCSim(steps, numLigands, ligPot, pActivateStep, R2, dims, delta, omegaNeg, gamma)
 		print([react,IF, CS, proteinActivateState, ligandReactState])
@@ -174,7 +175,10 @@ def runSim(numLigands, Lfactor,dims, omegaNeg):
 	print(sum(IFs))
 	return [reacts, IFs, CSs, proteinActivateStates, ligandReactStates]
 
+# make a density plot of the trajectory
+# requires changing the return statement to trajectory in MCSim before running
 def testLigMoves():
+	# set up parameters for ligand move test
 	steps=100000
 	trials=10
 	numLigands=2
@@ -189,39 +193,36 @@ def testLigMoves():
 	ligPot=ligPotential( R, U0, Lfactor)
 	omegaNeg=.5
 	
+	# do 10 trials of 100000 steps
 	outStates=[]
 	for k in range(trials):
 		outStates.extend(MCSim(steps, numLigands, ligPot, pActivateStep, R2, dims, delta, omegaNeg))
-	#rawX=[x[1] if x[0]==False else 100 for x in outStates ]
+	# filter out just the protein off states
 	rawX=filter(lambda a: a[0]==False, outStates)
 	rawX=[x[1] for x in rawX]
 	filteredX=[rawX[i] for i in range(0,len(rawX),10)]
+	# plot and save
 	labels = ['x', 'y']
 	df = pd.DataFrame.from_records(filteredX, columns=labels)
 	sns.jointplot( x='x',y='y',data=df, kind="kde")
 	plt.savefig('off'+str(delta*100)+'.png', bbox_inches='tight')
+	# filter out just the protein on states
 	rawX=filter(lambda a: a[0]==True, outStates)
 	rawX=[x[1] for x in rawX]
 	filteredX=[rawX[i] for i in range(0,len(rawX),10)]
+	# plot and save
 	labels = ['x', 'y']
 	df = pd.DataFrame.from_records(filteredX, columns=labels)
 	sns.jointplot( x='x',y='y',data=df, kind="kde")
 	plt.savefig('on'+str(delta*100)+'.png', bbox_inches='tight')
 
-#function to estimate avgs and errors by repeat calls to MCSim
-def estimateMCerror(steps, potentialName, temp, trials):
-	PA=[]# storage var for estimates
-	for i in range(trials): #iterate over num trials
-		PA.append(MCSim(steps,potentialName,temp)) # run a trial
-	mean=1.*sum(PA)/trials # find mean
-	variance=sum([(mean-sample)**2 for sample in PA])/len(PA) #find variance
-	return mean, variance
-# testLigMoves()
+# function to run runSim with different numbers of ligands and lfactors for D=.5 and dims=2...
+# it will save each parameter set seperately in a picklefile with four lists. 
 def LfactorTest():
-	for ligands in [2, 1, 5, 10]:
+	for ligands in [2, 5]:
 		print("ligand")
 		print(ligands)
-		for Lfactor in [.005, .0025, .01, .001, .025]:
+		for Lfactor in [1, .5, .1 ]:
 			print("Lfactor")
 			print(Lfactor)
 			output=runSim(ligands, Lfactor,2, .5)
